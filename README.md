@@ -52,6 +52,9 @@ Due to the way I disable the boost after half a second while rail grinding, Soni
 - Skills/Allow Spin Dash on Dash Panels
 - Skills/Always Trickable Spin Dash Exit
 - Skills/Disable Stomp Flip
+- Skills/Sonic/Allow Attacking from Stomp Bounce
+- Skills/Sonic/Disable Drop Dash
+- Skills/Sonic/Disable Loop Kick on Slide
 
 ##### Physics
 - Classic Jump Deceleration
