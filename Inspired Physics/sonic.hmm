@@ -1,0 +1,337 @@
+Library "Counters" by "cali_burrito"
+{
+  #lib "Time"
+
+  private static float _elapsedTime = 0f;
+  private static bool _isTimerReset = true;
+
+  public float GetElapsedTime(string in_timerLabel) {
+    _isTimerReset = false;
+    _elapsedTime += Time.GetDeltaTime();
+    Console.WriteLine($"{in_timerLabel}: {_elapsedTime}s");
+
+    return _elapsedTime;
+  }
+
+  public void ResetElapsedTime(string in_timerLabel) {
+    if (!_isTimerReset) {
+      _elapsedTime = 0;
+      Console.WriteLine($"{in_timerLabel}: TIMER RESET");
+      _isTimerReset = true;
+    }
+  }
+
+  public void GetTrackedValue(string in_trackerLabel, float in_value) {
+    Console.WriteLine($"{in_trackerLabel}: {in_value}");
+  }
+}
+
+Code "Running Tweaks" by "cali_burrito"
+//
+  #include "Reflection" noemit
+
+  #lib "SonicParameters"
+
+  static float _decelerationForce = 5f;
+//
+{
+  var sonicParams = Reflection.GetDataInfo<SonicParameters.Root>("player_common");
+
+  if (sonicParams.pData != null) {
+    /*
+      Running speed
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.normal.max, sonicParams.pData->cyberspace.modePackage.speed.normal.max);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.normal2.max, sonicParams.pData->cyberspace.modePackage.speed.normal2.max);
+
+    // Running deceleration force
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.decele.force, _decelerationForce);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.decele.force2, _decelerationForce);
+
+    /*
+      Incline jump speed
+      Conflicts with "Retain Velocity When Jumping Up Slopes" HMM physics code
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.jumpSpeed.limitUpSpeed, 30f);
+
+    // Matches max wall running speed to max overall speed
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.wallmove.maxSpeed, sonicParams.pData->forwardView.modePackage.speed.maxSpeedOver);
+
+    // Minimum wall running speed
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.wallmove.walkSpeed, 20f);
+
+    // Max wall running speed
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.wallmove.walkSpeedMax, sonicParams.pData->forwardView.modePackage.speed.maxSpeedOver);
+
+    // Dynamic wall running brake force
+    if (Player.Input.IsDown(Player.InputActionType.PlayerBoost))
+      RFL_SET_PARAM(sonicParams, forwardView.modePackage.wallmove.brake, 15f);
+    else
+      RFL_SET_PARAM(sonicParams, forwardView.modePackage.wallmove.brake, 60f);
+  }
+}
+
+Code "Boosting Tweaks" by "cali_burrito"
+//
+  #include "Reflection" noemit
+  #include "BlackboardStatus" noemit
+
+  #lib "SonicParameters"
+  #lib "Player"
+  #lib "Lua"
+
+  #import "Counters"
+//
+{
+  var sonicParams = Reflection.GetDataInfo<SonicParameters.Root>("player_common");
+
+  if (sonicParams.pData != null) {
+    // Disables boost except when the player is airborne or grinding
+    if (IS_STATE_FLAG(IsGrind) || !Player.Status.IsGrounded())
+      Lua.Call("SetPlayerAbilityEnabled", "Boost", true)
+    else
+      Lua.Call("SetPlayerAbilityEnabled", "Boost", false)
+
+    // Limits boost time to 0.5s while grinding
+    if (IS_STATE_FLAG(IsGrind) && IS_STATE_FLAG(IsBoost)) {
+      // For debugging
+      string timerLabel = "GRIND BOOST TIMER";
+      var elapsedTime = Counters.GetElapsedTime(timerLabel);
+
+      if (elapsedTime >= 0.5f) {
+        SET_STATE_FLAG(IsBoost, false);
+        ResetElapsedTime(timerLabel);
+      }
+    }
+
+    // Automatically run at max speed during quickstep sections
+    if (IS_WORLD_FLAG(IsAutoRun))
+      SET_STATE_FLAG(IsBoost, true);
+
+    /*
+      Animation easing between running and max running speeds
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost.initial, sonicParams.pData->cyberspace.modePackage.speed.boost.initial);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost.min, sonicParams.pData->cyberspace.modePackage.speed.boost.min);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost.max, sonicParams.pData->cyberspace.modePackage.speed.boost.max);
+
+    /*
+      Boosting speed
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost2.initial, sonicParams.pData->cyberspace.modePackage.speed.boost2.initial);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost2.min, sonicParams.pData->cyberspace.modePackage.speed.boost2.min);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.speed.boost2.max, sonicParams.pData->forwardView.modePackage.speed.maxSpeedOver);
+
+    /*
+      Air boosting speed
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.startHSpeed, sonicParams.pData->cyberspace.modePackage.airboost.startHSpeed);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.startHSpeedMax, sonicParams.pData->cyberspace.modePackage.airboost.startHSpeedMax);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.minHSpeed, sonicParams.pData->cyberspace.modePackage.airboost.minHSpeed);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.minHSpeedMax, sonicParams.pData->cyberspace.modePackage.airboost.minHSpeedMax);
+
+    /*
+      Max air boosting time
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.minKeepTime, sonicParams.pData->cyberspace.modePackage.airboost.minKeepTime);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.maxKeepTime, sonicParams.pData->cyberspace.modePackage.airboost.maxKeepTime);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.airboost.maxTime, sonicParams.pData->cyberspace.modePackage.airboost.maxTime);
+  }
+}
+
+Code "Spin Dash Tweaks" by "cali_burrito"
+//
+  #include "Reflection" noemit
+
+  #lib "SonicParameters"
+  #lib "Player"
+  #lib "XInput"
+
+  #import "Counters"
+
+  static float _spinChargeCount = 0f;
+  static float _maxSpinChargeCount = 5f;
+  static float _minSpinDashSpeed = 30f;
+  static float _maxSpinDashSpeed = 65f;
+  static float _valueDifference = (_maxSpinDashSpeed - _minSpinDashSpeed) / (_maxSpinChargeCount + 1f);
+  static float _minSpinDashRunTime = 0.5f;
+  static float _maxSpinDashRunTime = 2f;
+//
+{
+  var sonicParams = Reflection.GetDataInfo<SonicParameters.Root>("player_common");
+
+  if (sonicParams.pData != null) {
+    /*
+      Rolling speed
+      Set to current speed by default
+    */
+    float spinDashSpeed = Player.Kinematics.GetMagnitude();
+    
+    /*
+      Spin charging
+      Dash speed is determined by how long the player holds LT or how many times the player spams LT
+    */
+    if (Player.State.GetCurrentStateID<Sonic.StateID>() == Sonic.StateID.StateSpinBoostCharge) {
+      if (Player.Status.IsGrounded()) {
+        if (Player.Input.IsPressed(Player.InputActionType.PlayerSonicboom))
+          _spinChargeCount += 1f
+        
+        _spinChargeCount += 0.05f;
+      } else if (!Player.Status.IsGrounded()) {
+        if (Player.Input.IsReleased(Player.InputActionType.PlayerSonicboom))
+          Player.State.SetState<Sonic.StateID>(Sonic.StateID.StateFall);
+        
+        _spinChargeCount += 0.075f;
+      }
+
+      spinDashSpeed = MathHelpers.Clamp(
+        (_minSpinDashSpeed - _valueDifference) + (_spinChargeCount * _valueDifference),
+        _minSpinDashSpeed,
+        _maxSpinDashSpeed
+      )
+
+      // For debugging
+      GetTrackedValue("SPIN DASH SPEED", spinDashSpeed);
+    } else {
+      _spinChargeCount = 0f;
+      spinDashSpeed = Player.Kinematics.GetMagnitude();
+    }
+
+    // Sets rolling speed
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.speedBoost.initialSpeed, spinDashSpeed);
+
+    // Minimum rolling speed
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.speedBoost.maxSpeed, 5f);
+
+    // Max rolling gravity acceleration
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.maxGravityAccele, 50f);
+
+    /*
+      Rolling deceleration force
+      Uses running deceleration force
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.speedBoost.decele.force, sonicParams.pData->forwardView.modePackage.speed.decele.force);
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.speedBoost.decele.force2, sonicParams.pData->forwardView.modePackage.speed.decele.force2);
+
+    // Minimum angle the player must be to fling off terrain
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.jumpOutAngle, 30f);
+
+    // Nerfs in-air spin dash gravity
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.gravitySizeMinInAir, sonicParams.pData->forwardView.spinBoost.gravitySize * (1f / 3f));
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.gravitySizeMaxInAir, sonicParams.pData->forwardView.spinBoost.gravitySize * (2f / 3f));
+
+    // In-air spin charging control
+    // Conflicts with "Disable Spin Charge Air Deceleration" HMM physics code
+    var kinematics = Player.Kinematics.Get();
+
+    if (kinematics != null) {
+      if (!Player.Status.IsGrounded() && Player.State.GetCurrentStateID<Sonic.StateID>() == Sonic.StateID.StateSpinBoostCharge && !XInput.IsAnalogNeutral(0))
+        kinematics->Velocity += Player.Kinematics.GetForward();
+    }
+
+    /*
+      Minimum rolling time after letting go of LT
+      Determined by current speed
+      Equation source: https://stackoverflow.com/questions/5731863/mapping-a-numeric-range-onto-another
+    */
+    float minSpeed = sonicParams.pData->forwardView.modePackage.speed.normal.initial;
+    float maxSpeed = sonicParams.pData->forwardView.modePackage.speed.maxSpeedOver;
+    float spinDashRunTime = _minSpinDashRunTime + ((_maxSpinDashRunTime - _minSpinDashRunTime) / (maxSpeed - minSpeed)) * (spinDashSpeed - minSpeed);
+
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.forceRunTime, spinDashRunTime);
+
+    // Initial rolling run time
+    RFL_SET_PARAM(sonicParams, forwardView.spinBoost.initialRunTime, 0.1f);
+
+    if (Player.State.GetCurrentStateID<Sonic.StateID>() == Sonic.StateID.StateSpinBoost) {
+      // For debugging
+      GetTrackedValue("SPIN DASH RUN TIME", spinDashRunTime)
+    }
+
+    /*
+      Disables spin move unless the player is moving
+      Spin move time is limited to 1 second
+    */
+    Player.State.Redirect<Sonic.StateID>(Sonic.StateID.StateSpinMove, Sonic.StateID.StateStand);
+
+    if (Player.Kinematics.GetMagnitude() != 0f && !IS_STATE_FLAG(IsGrind)) {
+      Player.State.Restore<Sonic.StateID>(Sonic.StateID.StateSpinMove);
+      string timerLabel = "SPIN MOVE TIMER";
+
+      if (Player.State.GetCurrentStateID<Sonic.StateID>() == Sonic.StateID.StateSpinMove) {
+        var elapsedTime = Counters.GetElapsedTime(timerLabel);
+
+        if (elapsedTime >= 1f && Player.Status.IsGrounded()) {
+          Player.State.SetState<Sonic.StateID>(Sonic.StateID.StateStand);
+
+          // For debugging
+          ResetElapsedTime(timerLabel);
+        } else if (elapsedTime >= 1f && !Player.Status.IsGrounded()) {
+          Player.State.SetState<Sonic.StateID>(Sonic.StateID.StateFall);
+
+          // For debugging
+          ResetElapsedTime(timerLabel);
+        }
+      } else {
+        // For debugging
+        ResetElapsedTime(timerLabel);
+      }
+    }
+  }
+}
+
+Code "Miscellaneous Tweaks" by "cali_burrito"
+//
+  #include "Reflection" noemit
+
+  #lib "SonicParameters"
+//
+{
+  var sonicParams = Reflection.GetDataInfo<SonicParameters.Root>("player_common");
+
+  if (sonicParams.pData != null) {
+    /*
+      Grinding acceleration force
+      Uses max running acceleration force
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.grind.acceleForce, sonicParams.pData->forwardView.modePackage.speed.maxGravityAccele);
+
+    /*
+      Grinding deceleration force
+      Uses running deceleration force
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.grind.deceleForce, sonicParams.pData->forwardView.modePackage.speed.decele.force);
+
+    // Minimum grinding speed
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.grind.limitSpeedMin, 8f);
+
+    /*
+      Minimum sliding speed
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.sliding.minSpeed, sonicParams.pData->cyberspace.modePackage.sliding.minSpeed);
+
+    /*
+      Removes extra air drag
+      Uses Cyber Space values
+    */
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.fall.overSpeedDeceleForce, sonicParams.pData->cyberspace.modePackage.fall.overSpeedDeceleForce);
+
+    // Matches Sonic's parry timings with the other characters' timings
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.maxRecieveTimes[0], 2f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.maxRecieveTimes[1], 1.5f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.maxRecieveTimes[2], 1f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.maxRecieveTimes[3], 0.5f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justRecieveTimes[0], 2f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justRecieveTimes[1], 1.5f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justRecieveTimes[2], 1f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justRecieveTimes[3], 0.5f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justEffectTime, 1f);
+    RFL_SET_PARAM(sonicParams, forwardView.modePackage.parry.justEffectTime3, 1f);
+  }
+}
